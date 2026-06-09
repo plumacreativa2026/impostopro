@@ -1,0 +1,6 @@
+{
+  "name": "ImpostoPro",
+  "description": "Professional PDF imposition and layout planner for print environments. Supports N-UP, Step & Repeat, Cut & Stack, and Dutch Cut algorithms.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
