@@ -32,7 +32,7 @@ export function calculateGridMetrics(state: AppState): GridMetrics {
   // Let's resolve the actual page count
   const numPages = state.sourceNumPages > 0 ? state.sourceNumPages : 1;
 
-  if (state.impositionMode === 'dutch') {
+  if (state.impositionMode === 'dutch' || (state.chkAutoRotate && state.isGridAuto && state.impositionMode !== 'cutstack')) {
     // Dutch Cut optimization algorithm!
     let bestCells: PlacedCell[] = [];
     let bestCount = 0;
@@ -334,8 +334,8 @@ export function calculateGridMetrics(state: AppState): GridMetrics {
     const rowsRot = Math.max(0, Math.floor((printableH + state.gapY) / (chRot + state.gapY)));
     const fitRot = colsRot * rowsRot;
 
-    // Decider logic
-    if (state.chkAutoRotate && fitRot > fitNormal) {
+    // Decider logic: rotate to optimize if it fits MORE copies, or EQUAL copies (so the user gets visible response when checking)
+    if (state.chkAutoRotate && fitRot >= fitNormal) {
       cols = colsRot;
       rows = rowsRot;
       isRotated = true;
@@ -348,7 +348,7 @@ export function calculateGridMetrics(state: AppState): GridMetrics {
     // Manual setup: user forces exact rows/columns
     cols = state.manualCols;
     rows = state.manualRows;
-    isRotated = false; // assume no rotation when user forces exact positions manually
+    isRotated = state.chkAutoRotate; // Allow manual 90 deg rotation using the same checkbox!
   }
 
   const copiesPerSheet = cols * rows;
@@ -407,3 +407,66 @@ export function calculateGridMetrics(state: AppState): GridMetrics {
     placedCells
   };
 }
+
+/**
+ * Checks if a horizontal cut at coordinate `y` is safe (i.e. it does not cut through the interior of any card)
+ */
+export function isSafeHorizontalCut(y: number, cells: PlacedCell[], bleed: number, epsilon = 0.5): boolean {
+  for (const cell of cells) {
+    const yStart = cell.y + bleed;
+    const yEnd = cell.y + cell.h - bleed;
+    if (y > yStart + epsilon && y < yEnd - epsilon) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Checks if a vertical cut at coordinate `x` is safe (i.e. it does not cut through the interior of any card)
+ */
+export function isSafeVerticalCut(x: number, cells: PlacedCell[], bleed: number, epsilon = 0.5): boolean {
+  for (const cell of cells) {
+    const xStart = cell.x + bleed;
+    const xEnd = cell.x + cell.w - bleed;
+    if (x > xStart + epsilon && x < xEnd - epsilon) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Checks if a crop line segment from (x1, y1) to (x2, y2) overlaps with the interior of any card.
+ */
+export function isCropLineSafe(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cells: PlacedCell[],
+  epsilon = 0.5
+): boolean {
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+
+  for (const cell of cells) {
+    // Overlap with the interior of the cell.
+    const cellMinX = cell.x + epsilon;
+    const cellMaxX = cell.x + cell.w - epsilon;
+    const cellMinY = cell.y + epsilon;
+    const cellMaxY = cell.y + cell.h - epsilon;
+
+    const overlapX = minX < cellMaxX && maxX > cellMinX;
+    const overlapY = minY < cellMaxY && maxY > cellMinY;
+
+    if (overlapX && overlapY) {
+      return false;
+    }
+  }
+  return true;
+}
+
+

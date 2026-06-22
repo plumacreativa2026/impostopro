@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { AppState, GridMetrics } from '../types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { isSafeHorizontalCut, isSafeVerticalCut, isCropLineSafe } from '../utils/imposition';
 
 interface PreviewCanvasProps {
   state: AppState;
@@ -271,40 +272,6 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
           ctx.strokeRect(cellX + B, cellY + B, cellCw - 2 * B, cellCh - 2 * B);
           ctx.restore();
         }
-
-        // Individual crop marks (when layout has gap)
-        if (state.chkCropMarks) {
-          const isZeroGapMode = state.impositionMode === 'nup' || state.impositionMode === 'cutstack';
-          if (!isZeroGapMode) {
-            ctx.strokeStyle = '#1e1e1e';
-            ctx.lineWidth = 0.2;
-
-            const offset = 2; // mm
-            const cropLen = 3; // mm
-            const B = state.chkBleed ? state.bleedMm : 0;
-
-            const x1 = cellX + B;
-            const x2 = cellX + cellCw - B;
-            const y1 = cellY + B;
-            const y2 = cellY + cellCh - B;
-
-            // Top-Left corner
-            drawCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
-            drawCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
-
-            // Top-Right corner
-            drawCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
-            drawCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
-
-            // Bottom-Left corner
-            drawCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
-            drawCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
-
-            // Bottom-Right corner
-            drawCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
-            drawCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
-          }
-        }
       } else {
         // Grayed hashed frame indicating inactive empty slots
         ctx.strokeStyle = '#e5e1dc';
@@ -313,10 +280,58 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
         ctx.strokeRect(cellX, cellY, cellCw, cellCh);
         ctx.setLineDash([]);
       }
+
+      // Individual crop marks (printed for all layout boxes, active or inactive)
+      if (state.chkCropMarks) {
+        ctx.strokeStyle = '#1e1e1e';
+        ctx.lineWidth = 0.2;
+
+        const offset = 2; // mm
+        const cropLen = 3; // mm
+        const B = state.chkBleed ? state.bleedMm : 0;
+
+        const x1 = cellX + B;
+        const x2 = cellX + cellCw - B;
+        const y1 = cellY + B;
+        const y2 = cellY + cellCh - B;
+
+        // Top-Left corner
+        if (isCropLineSafe(x1, cellY - offset, x1, cellY - offset - cropLen, metrics.placedCells)) {
+          drawCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
+        }
+        if (isCropLineSafe(cellX - offset, y1, cellX - offset - cropLen, y1, metrics.placedCells)) {
+          drawCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
+        }
+
+        // Top-Right corner
+        if (isCropLineSafe(x2, cellY - offset, x2, cellY - offset - cropLen, metrics.placedCells)) {
+          drawCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
+        }
+        if (isCropLineSafe(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1, metrics.placedCells)) {
+          drawCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
+        }
+
+        // Bottom-Left corner
+        if (isCropLineSafe(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen, metrics.placedCells)) {
+          drawCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
+        }
+        if (isCropLineSafe(cellX - offset, y2, cellX - offset - cropLen, y2, metrics.placedCells)) {
+          drawCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
+        }
+
+        // Bottom-Right corner
+        if (isCropLineSafe(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen, metrics.placedCells)) {
+          drawCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
+        }
+        if (isCropLineSafe(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2, metrics.placedCells)) {
+          drawCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
+        }
+      }
     }
 
     // Outer-perimeter common-cut crop marks (when layout has no gaps / N-UP, Cut-Stack)
-    const isZeroGapMode = state.impositionMode === 'nup' || state.impositionMode === 'cutstack';
+    const isDutchOrMixed = state.impositionMode === 'dutch' || (metrics.placedCells.some(c => c.isRotated) && metrics.placedCells.some(c => !c.isRotated));
+    const isZeroGapMode = !isDutchOrMixed && (state.impositionMode === 'nup' || state.impositionMode === 'cutstack' || (state.gapX === 0 && state.gapY === 0));
     if (state.chkCropMarks && isZeroGapMode) {
       ctx.strokeStyle = '#1e1e1e';
       ctx.lineWidth = 0.2;

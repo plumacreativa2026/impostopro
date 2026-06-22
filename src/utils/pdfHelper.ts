@@ -5,6 +5,7 @@
 import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import { AppState, GridMetrics, MM_TO_PT, PT_TO_MM } from '../types';
+import { isSafeHorizontalCut, isSafeVerticalCut, isCropLineSafe } from './imposition';
 
 const pdfjsVersion = pdfjsLib.version || '6.0.227';
 // Set up worker path via CDN with exact version matching to guarantee version matching and bypass CORS limits
@@ -284,41 +285,56 @@ export async function generateImposedPDF(
           });
         }
 
-        // Individual cell crop marks (when gaps are present)
-        if (state.chkCropMarks) {
-          const isZeroGapMode = state.impositionMode === 'nup' || state.impositionMode === 'cutstack';
-          if (!isZeroGapMode) {
-            const offset = 2; // mm
-            const cropLen = 3; // mm
+      }
 
-            const B = state.chkBleed ? state.bleedMm : 0;
-            const x1 = cellX + B;
-            const x2 = cellX + cellCw - B;
-            const y1 = cellY + B;
-            const y2 = cellY + cellCh - B;
+      // Individual cell crop marks (printed for all layout boxes, active or inactive)
+      if (state.chkCropMarks) {
+        const offset = 2; // mm
+        const cropLen = 3; // mm
 
-            // Top-Left corner
-            drawPdfCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
-            drawPdfCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
+        const B = state.chkBleed ? state.bleedMm : 0;
+        const x1 = cellX + B;
+        const x2 = cellX + cellCw - B;
+        const y1 = cellY + B;
+        const y2 = cellY + cellCh - B;
 
-            // Top-Right corner
-            drawPdfCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
-            drawPdfCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
+        // Top-Left corner
+        if (isCropLineSafe(x1, cellY - offset, x1, cellY - offset - cropLen, m.placedCells)) {
+          drawPdfCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
+        }
+        if (isCropLineSafe(cellX - offset, y1, cellX - offset - cropLen, y1, m.placedCells)) {
+          drawPdfCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
+        }
 
-            // Bottom-Left corner
-            drawPdfCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
-            drawPdfCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
+        // Top-Right corner
+        if (isCropLineSafe(x2, cellY - offset, x2, cellY - offset - cropLen, m.placedCells)) {
+          drawPdfCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
+        }
+        if (isCropLineSafe(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1, m.placedCells)) {
+          drawPdfCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
+        }
 
-            // Bottom-Right corner
-            drawPdfCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
-            drawPdfCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
-          }
+        // Bottom-Left corner
+        if (isCropLineSafe(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen, m.placedCells)) {
+          drawPdfCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
+        }
+        if (isCropLineSafe(cellX - offset, y2, cellX - offset - cropLen, y2, m.placedCells)) {
+          drawPdfCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
+        }
+
+        // Bottom-Right corner
+        if (isCropLineSafe(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen, m.placedCells)) {
+          drawPdfCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
+        }
+        if (isCropLineSafe(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2, m.placedCells)) {
+          drawPdfCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
         }
       }
     }
 
     // Outer grid common-cut crop marks (when no gaps are used)
-    const isZeroGapMode = state.impositionMode === 'nup' || state.impositionMode === 'cutstack';
+    const isDutchOrMixed = state.impositionMode === 'dutch' || (m.placedCells.some(c => c.isRotated) && m.placedCells.some(c => !c.isRotated));
+    const isZeroGapMode = !isDutchOrMixed && (state.impositionMode === 'nup' || state.impositionMode === 'cutstack' || (state.gapX === 0 && state.gapY === 0));
     if (state.chkCropMarks && isZeroGapMode) {
       const offset = 2; // mm
       const cropLen = 3; // mm

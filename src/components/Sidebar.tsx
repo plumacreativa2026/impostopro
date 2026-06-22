@@ -626,7 +626,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <input 
               type="checkbox"
               checked={state.chkAutoRotate}
-              disabled={!state.isGridAuto || state.impositionMode === 'dutch'}
+              disabled={state.impositionMode === 'dutch'}
               onChange={(e) => onChange({ chkAutoRotate: e.target.checked })}
               className="w-4 h-4 mt-0.5 accent-[#a67472] text-[#a67472] border-stone-300 rounded focus:ring-[#a67472] disabled:opacity-40"
             />
