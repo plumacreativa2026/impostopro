@@ -287,83 +287,46 @@ export async function generateImposedPDF(
 
       }
 
-      // Individual cell crop marks (printed for all layout boxes, active or inactive)
-      if (state.chkCropMarks) {
-        const offset = 2; // mm
-        const cropLen = 3; // mm
-
-        const B = state.chkBleed ? state.bleedMm : 0;
-        const x1 = cellX + B;
-        const x2 = cellX + cellCw - B;
-        const y1 = cellY + B;
-        const y2 = cellY + cellCh - B;
-
-        // Top-Left corner
-        if (isCropLineSafe(x1, cellY - offset, x1, cellY - offset - cropLen, m.placedCells)) {
-          drawPdfCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
-        }
-        if (isCropLineSafe(cellX - offset, y1, cellX - offset - cropLen, y1, m.placedCells)) {
-          drawPdfCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
-        }
-
-        // Top-Right corner
-        if (isCropLineSafe(x2, cellY - offset, x2, cellY - offset - cropLen, m.placedCells)) {
-          drawPdfCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
-        }
-        if (isCropLineSafe(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1, m.placedCells)) {
-          drawPdfCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
-        }
-
-        // Bottom-Left corner
-        if (isCropLineSafe(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen, m.placedCells)) {
-          drawPdfCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
-        }
-        if (isCropLineSafe(cellX - offset, y2, cellX - offset - cropLen, y2, m.placedCells)) {
-          drawPdfCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
-        }
-
-        // Bottom-Right corner
-        if (isCropLineSafe(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen, m.placedCells)) {
-          drawPdfCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
-        }
-        if (isCropLineSafe(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2, m.placedCells)) {
-          drawPdfCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
-        }
-      }
     }
 
-    // Outer grid common-cut crop marks (when no gaps are used)
-    const isDutchOrMixed = state.impositionMode === 'dutch' || (m.placedCells.some(c => c.isRotated) && m.placedCells.some(c => !c.isRotated));
-    const isZeroGapMode = !isDutchOrMixed && (state.impositionMode === 'nup' || state.impositionMode === 'cutstack' || (state.gapX === 0 && state.gapY === 0));
-    if (state.chkCropMarks && isZeroGapMode) {
+    // Unified, high-precision perimeter crop marks (drawn outside the entire layout, never in gutters)
+    if (state.chkCropMarks && m.placedCells.length > 0) {
       const offset = 2; // mm
       const cropLen = 3; // mm
       const B = state.chkBleed ? state.bleedMm : 0;
 
+      // 1. Calculate the bounding box of all placed cells
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const cell of m.placedCells) {
+        if (cell.x < minX) minX = cell.x;
+        if (cell.x + cell.w > maxX) maxX = cell.x + cell.w;
+        if (cell.y < minY) minY = cell.y;
+        if (cell.y + cell.h > maxY) maxY = cell.y + cell.h;
+      }
+
+      // 2. Collect unique vertical and horizontal cut coordinates
       const cutXs = new Set<number>();
       const cutYs = new Set<number>();
-
-      for (let c = 0; c < m.cols; c++) {
-        const cellX = startX + c * cw;
-        cutXs.add(cellX + B);
-        cutXs.add(cellX + cw - B);
-      }
-      for (let r = 0; r < m.rows; r++) {
-        const cellY = startY + r * ch;
-        cutYs.add(cellY + B);
-        cutYs.add(cellY + ch - B);
+      for (const cell of m.placedCells) {
+        cutXs.add(cell.x + B);
+        cutXs.add(cell.x + cell.w - B);
+        cutYs.add(cell.y + B);
+        cutYs.add(cell.y + cell.h - B);
       }
 
-      // Col cuts (vertical indices)
+      // 3. Draw vertical crop marks (at top and bottom of the entire layout)
       for (const x of cutXs) {
-        drawPdfCropLine(x, startY - offset, x, startY - offset - cropLen);
-        drawPdfCropLine(x, startY + gridH + offset, x, startY + gridH + offset + cropLen);
+        drawPdfCropLine(x, minY - offset, x, minY - offset - cropLen);
+        drawPdfCropLine(x, maxY + offset, x, maxY + offset + cropLen);
       }
 
-      // Row cuts (horizontal indices)
+      // 4. Draw horizontal crop marks (at left and right of the entire layout)
       for (const y of cutYs) {
-        drawPdfCropLine(startX - offset, y, startX - offset - cropLen, y);
-        drawPdfCropLine(startX + gridW + offset, y, startX + gridW + offset + cropLen, y);
+        drawPdfCropLine(minX - offset, y, minX - offset - cropLen, y);
+        drawPdfCropLine(maxX + offset, y, maxX + offset + cropLen, y);
       }
     }
   }

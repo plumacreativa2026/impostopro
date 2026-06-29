@@ -445,7 +445,7 @@ export function isCropLineSafe(
   x2: number,
   y2: number,
   cells: PlacedCell[],
-  epsilon = 0.5
+  epsilon = 0.05
 ): boolean {
   const minX = Math.min(x1, x2);
   const maxX = Math.max(x1, x2);

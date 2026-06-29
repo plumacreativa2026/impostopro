@@ -280,90 +280,49 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
         ctx.strokeRect(cellX, cellY, cellCw, cellCh);
         ctx.setLineDash([]);
       }
-
-      // Individual crop marks (printed for all layout boxes, active or inactive)
-      if (state.chkCropMarks) {
-        ctx.strokeStyle = '#1e1e1e';
-        ctx.lineWidth = 0.2;
-
-        const offset = 2; // mm
-        const cropLen = 3; // mm
-        const B = state.chkBleed ? state.bleedMm : 0;
-
-        const x1 = cellX + B;
-        const x2 = cellX + cellCw - B;
-        const y1 = cellY + B;
-        const y2 = cellY + cellCh - B;
-
-        // Top-Left corner
-        if (isCropLineSafe(x1, cellY - offset, x1, cellY - offset - cropLen, metrics.placedCells)) {
-          drawCropLine(x1, cellY - offset, x1, cellY - offset - cropLen);
-        }
-        if (isCropLineSafe(cellX - offset, y1, cellX - offset - cropLen, y1, metrics.placedCells)) {
-          drawCropLine(cellX - offset, y1, cellX - offset - cropLen, y1);
-        }
-
-        // Top-Right corner
-        if (isCropLineSafe(x2, cellY - offset, x2, cellY - offset - cropLen, metrics.placedCells)) {
-          drawCropLine(x2, cellY - offset, x2, cellY - offset - cropLen);
-        }
-        if (isCropLineSafe(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1, metrics.placedCells)) {
-          drawCropLine(cellX + cellCw + offset, y1, cellX + cellCw + offset + cropLen, y1);
-        }
-
-        // Bottom-Left corner
-        if (isCropLineSafe(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen, metrics.placedCells)) {
-          drawCropLine(x1, cellY + cellCh + offset, x1, cellY + cellCh + offset + cropLen);
-        }
-        if (isCropLineSafe(cellX - offset, y2, cellX - offset - cropLen, y2, metrics.placedCells)) {
-          drawCropLine(cellX - offset, y2, cellX - offset - cropLen, y2);
-        }
-
-        // Bottom-Right corner
-        if (isCropLineSafe(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen, metrics.placedCells)) {
-          drawCropLine(x2, cellY + cellCh + offset, x2, cellY + cellCh + offset + cropLen);
-        }
-        if (isCropLineSafe(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2, metrics.placedCells)) {
-          drawCropLine(cellX + cellCw + offset, y2, cellX + cellCw + offset + cropLen, y2);
-        }
-      }
     }
 
-    // Outer-perimeter common-cut crop marks (when layout has no gaps / N-UP, Cut-Stack)
-    const isDutchOrMixed = state.impositionMode === 'dutch' || (metrics.placedCells.some(c => c.isRotated) && metrics.placedCells.some(c => !c.isRotated));
-    const isZeroGapMode = !isDutchOrMixed && (state.impositionMode === 'nup' || state.impositionMode === 'cutstack' || (state.gapX === 0 && state.gapY === 0));
-    if (state.chkCropMarks && isZeroGapMode) {
+    // Unified, high-precision perimeter crop marks (drawn outside the entire layout, never in gutters)
+    if (state.chkCropMarks && metrics.placedCells.length > 0) {
       ctx.strokeStyle = '#1e1e1e';
       ctx.lineWidth = 0.2;
 
-      const offset = 2;
-      const cropLen = 3;
+      const offset = 2; // mm
+      const cropLen = 3; // mm
       const B = state.chkBleed ? state.bleedMm : 0;
 
+      // 1. Calculate the bounding box of all placed cells
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const cell of metrics.placedCells) {
+        if (cell.x < minX) minX = cell.x;
+        if (cell.x + cell.w > maxX) maxX = cell.x + cell.w;
+        if (cell.y < minY) minY = cell.y;
+        if (cell.y + cell.h > maxY) maxY = cell.y + cell.h;
+      }
+
+      // 2. Collect unique vertical and horizontal cut coordinates
       const cutXs = new Set<number>();
       const cutYs = new Set<number>();
-
-      for (let c = 0; c < metrics.cols; c++) {
-        const cellX = startX + c * cw;
-        cutXs.add(cellX + B);
-        cutXs.add(cellX + cw - B);
-      }
-      for (let r = 0; r < metrics.rows; r++) {
-        const cellY = startY + r * ch;
-        cutYs.add(cellY + B);
-        cutYs.add(cellY + ch - B);
+      for (const cell of metrics.placedCells) {
+        cutXs.add(cell.x + B);
+        cutXs.add(cell.x + cell.w - B);
+        cutYs.add(cell.y + B);
+        cutYs.add(cell.y + cell.h - B);
       }
 
-      // Draw col boundaries
+      // 3. Draw vertical crop marks (at top and bottom of the entire layout)
       for (const x of cutXs) {
-        drawCropLine(x, startY - offset, x, startY - offset - cropLen);
-        drawCropLine(x, startY + gridH + offset, x, startY + gridH + offset + cropLen);
+        drawCropLine(x, minY - offset, x, minY - offset - cropLen);
+        drawCropLine(x, maxY + offset, x, maxY + offset + cropLen);
       }
 
-      // Draw row boundaries
+      // 4. Draw horizontal crop marks (at left and right of the entire layout)
       for (const y of cutYs) {
-        drawCropLine(startX - offset, y, startX - offset - cropLen, y);
-        drawCropLine(startX + gridW + offset, y, startX + gridW + offset + cropLen, y);
+        drawCropLine(minX - offset, y, minX - offset - cropLen, y);
+        drawCropLine(maxX + offset, y, maxX + offset + cropLen, y);
       }
     }
 
